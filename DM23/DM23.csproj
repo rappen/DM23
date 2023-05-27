@@ -220,6 +220,13 @@
     <None Include="app.config" />
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="MyPluginControl.resx">
+      <DependentUpon>MyPluginControl.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <Import Project="..\Rappen.XTB.Helper\Rappen.XRM.Helpers\Rappen.XRM.Helpers.projitems" Label="Shared" />
+  <Import Project="..\Rappen.XTB.Helper\Rappen.XTB.Helpers\Rappen.XTB.Helpers.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>IF $(ConfigurationName) == Debug (

@@ -1,14 +1,11 @@
 ﻿using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
+using Rappen.XRM.Helpers.Extensions;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using XrmToolBox.Extensibility;
 
@@ -102,6 +99,168 @@ namespace DM23
                 mySettings.LastUsedOrganizationWebappUrl = detail.WebApplicationUrl;
                 LogInfo("Connection has changed to: {0}", detail.WebApplicationUrl);
             }
+        }
+
+        private void MyPluginControl_ConnectionUpdated(object sender, ConnectionUpdatedEventArgs e)
+        {
+            xrmView.Service = Service;
+            xrmData.Service = Service;
+            xrmRecordHost1.Service = Service;
+            GetTables();
+        }
+
+        private void GetTables()
+        {
+            Enabled = false;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Loading Tables...",
+                Work = (worker, args) =>
+                {
+                    args.Result = Service.LoadEntities().EntityMetadata;
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    Enabled = true;
+                    if (args.Error != null)
+                    {
+                        ShowErrorDialog(args.Error);
+                    }
+                    else if (args.Result is EntityMetadataCollection entities)
+                    {
+                        xrmEntity.DataSource = entities
+                            .Where(e => chkManaged.Checked || e.IsManaged == false);
+                    }
+                }
+            });
+        }
+
+        private void chkManaged_CheckedChanged(object sender, EventArgs e)
+        {
+            GetTables();
+        }
+
+        private void xrmEntity_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            GetViews();
+        }
+
+        private void GetViews()
+        {
+            var entity = xrmEntity.SelectedEntity;
+            xrmPrimaryName.Column = entity?.PrimaryNameAttribute;
+            if (entity == null)
+            {
+                xrmView.DataSource = null;
+                return;
+            }
+            var query = new QueryExpression("savedquery")
+            {
+                ColumnSet = new ColumnSet("name", "fetchxml", "layoutxml"),
+                Criteria =
+                {
+                    Conditions =
+                    {
+                        new ConditionExpression("statecode", ConditionOperator.Equal, 0),
+                        new ConditionExpression("fetchxml", ConditionOperator.NotNull),
+                        new ConditionExpression("returnedtypecode", ConditionOperator.Equal, entity.LogicalName)
+                    }
+                }
+            };
+            Enabled = false;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Loading Views...",
+                Work = (worker, args) =>
+                {
+                    args.Result = Service.RetrieveMultipleAll(query);
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    Enabled = true;
+                    if (args.Error != null)
+                    {
+                        ShowErrorDialog(args.Error);
+                    }
+                    else if (args.Result is EntityCollection views)
+                    {
+                        xrmView.DataSource = views;
+                    }
+                }
+            });
+        }
+
+        private void xrmView_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            GetData();
+        }
+
+        private void GetData()
+        {
+            var fetch = xrmView.SelectedRecord?.GetAttributeValue<string>("fetchxml");
+            var layout = xrmView.SelectedRecord?.GetAttributeValue<string>("layoutxml");
+            if (string.IsNullOrWhiteSpace(fetch))
+            {
+                xrmData.DataSource = null;
+                return;
+            }
+            Enabled = false;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Loading Data...",
+                Work = (worker, args) =>
+                {
+                    //args.Result = Service.RetrieveMultipleAll(new FetchExpression(fetch));
+                    xrmData.SetDataSource(fetch, layout);
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    Enabled = true;
+                    if (args.Error != null)
+                    {
+                        ShowErrorDialog(args.Error);
+                    }
+                    else if (args.Result is EntityCollection data)
+                    {
+                        xrmData.DataSource = data;
+                    }
+                }
+            });
+        }
+
+        private void xrmData_RecordClick(object sender, Rappen.XTB.Helpers.Controls.XRMRecordEventArgs e)
+        {
+            xrmRecordHost1.Record = e.Entity;
+        }
+
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            Save();
+        }
+
+        private void Save()
+        {
+            Enabled = false;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Saving!",
+                Work = (worker, args) =>
+                {
+                    args.Result = xrmRecordHost1.SaveChanges();
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    Enabled = true;
+                    if (args.Error != null)
+                    {
+                        ShowErrorDialog(args.Error);
+                    }
+                    else if (args.Result is bool result && result)
+                    {
+                        GetData();
+                    }
+                }
+            });
         }
     }
 }
